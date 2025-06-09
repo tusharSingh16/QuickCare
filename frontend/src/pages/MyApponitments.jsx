@@ -2,10 +2,9 @@ import React, { useState, useContext } from "react";
 import { AppContext } from "../context/AppContext";
 import { toast } from "react-toastify";
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 const MyApponitments = () => {
-  //as of now we do not have appointment data so we are displaying doctors data
-  //after we create backend for appointment booking then we will show the appointments
   const months = [
     "",
     "Jan",
@@ -23,6 +22,7 @@ const MyApponitments = () => {
   ];
   const { backendUrl, token, getDoctorsData } = useContext(AppContext);
   const [appointments, setAppointments] = useState([]);
+  const navigate = useNavigate();
   const slotDateFormat = (slotDate) => {
     const dateArray = slotDate.split("_");
     return (
@@ -59,6 +59,52 @@ const MyApponitments = () => {
         getDoctorsData();
       } else {
         toast.error(data.message);
+      }
+    } catch (error) {
+      console.log(error.message);
+      toast.error(error.message);
+    }
+  };
+
+  const initPay = (order) => {
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: order.amount,
+      currency: order.currency,
+      name: "Appointment payment",
+      order_id: order.id,
+      receipt: order.receipt,
+      handler: async (response) => {
+        console.log(response);
+        try {
+          const { data } = await axios.post(
+            backendUrl + "/api/user/verify-razorpay",
+            response,
+            { headers: { token } }
+          );
+          if (data.success) {
+            getUserAppointments();
+            navigate("/my-appointments");
+          }
+        } catch (error) {
+          console.log(error.message);
+          toast.error(error.message);
+        }
+      },
+    };
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  };
+  const appointmentRazorpay = async (appointmentId) => {
+    try {
+      const { data } = await axios.post(
+        backendUrl + "/api/user/payment-razorpay",
+        { appointmentId },
+        { headers: { token } }
+      );
+      if (data.success) {
+        // console.log(data.order);
+        initPay(data.order);
       }
     } catch (error) {
       console.log(error.message);
@@ -103,8 +149,17 @@ const MyApponitments = () => {
             </div>
             <div></div>
             <div className="flex flex-col gap-3 justify-end">
-              {!item.cancelled && (
-                <button className="text-sm text-gray-500 text-center sm:min-w-48 py-2 border rounded-full hover:bg-primary sm:hover:scale-110  transition-all duration-500 hover:text-white ">
+              {!item.cancelled && item.payment && (
+                <button className="sm:min-w-48 py-2 border rounded text-stone-500 bg-indigo-50">
+                  Paid
+                </button>
+              )}
+              {!item.cancelled && !item.payment && (
+                <button
+                  onClick={() => {
+                    appointmentRazorpay(item._id);
+                  }}
+                  className="text-sm text-gray-500 text-center sm:min-w-48 py-2 border rounded-full hover:bg-primary sm:hover:scale-110  transition-all duration-500 hover:text-white ">
                   Pay Online
                 </button>
               )}
