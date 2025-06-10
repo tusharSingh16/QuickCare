@@ -4,6 +4,7 @@ import { v2 as cloundinary } from "cloudinary";
 import doctorModel from "../models/DoctorModel.js";
 import jwt from "jsonwebtoken";
 import appointmentModel from "../models/AppointmentModel.js";
+import userModel from "../models/UserModel.js";
 const addDoctor = async (req, res) => {
   try {
     const {
@@ -141,5 +142,53 @@ const appointmentsAdmin = async (req, res) => {
 };
 
 //api for appointment cancellation by admin
+const appointmentCancel = async (req, res) => {
+  try {
+    const { appointmentId } = req.body;
+    const appointmentData = await appointmentModel.findById(appointmentId);
 
-export { addDoctor, loginAdmin, allDoctors, appointmentsAdmin };
+    await appointmentModel.findByIdAndUpdate(appointmentId, {
+      cancelled: true,
+    });
+    //releasing the doctors slot
+    const { docId, slotDate, slotTime } = appointmentData;
+    const doctorData = await doctorModel.findById(docId);
+    let slots_booked = doctorData.slots_booked;
+    slots_booked[slotDate] = slots_booked[slotDate].filter(
+      (e) => e !== slotTime
+    );
+    await doctorModel.findByIdAndUpdate(docId, { slots_booked: slots_booked });
+
+    return res.json({ success: true, message: "Appointment cancelled" });
+  } catch (error) {
+    console.log(error.message);
+    return res.json({ success: false, message: error.message });
+  }
+};
+
+//api to get dashboard data for admin dashboard
+const adminDashboard = async (req, res) => {
+  try {
+    const doctors = await doctorModel.find({});
+    const users = await userModel.find({});
+    const appointments = await appointmentModel.find({});
+    const dashData = {
+      doctors: doctors.length,
+      appointments: appointments.length,
+      patients: users.length,
+      latestAppointments: appointments.reverse().slice(0, 5),
+    };
+    return res.json({ success: true, dashData: dashData });
+  } catch (error) {
+    console.log(error.message);
+    return res.json({ succcess: false, message: error.message });
+  }
+};
+export {
+  addDoctor,
+  loginAdmin,
+  allDoctors,
+  appointmentsAdmin,
+  appointmentCancel,
+  adminDashboard,
+};
